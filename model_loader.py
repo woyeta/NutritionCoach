@@ -20,8 +20,11 @@ _lock = threading.Lock()
 
 
 def _compute_dtype():
-    """bf16 where the GPU supports it (A100/L4), fp16 otherwise (e.g. T4)."""
-    if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+    """bf16 on GPUs with native support (Ampere or newer, e.g. A100/L4), fp16 otherwise (e.g. T4).
+
+    torch.cuda.is_bf16_supported() is also True on a T4, where bf16 is emulated and slow.
+    """
+    if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8:
         return torch.bfloat16
     return torch.float16
 
@@ -37,7 +40,8 @@ def load_model():
             return _model, _tokenizer
 
         dtype = _compute_dtype()
-        logger.info(f"Loading model: {MODEL_ID} (compute dtype {dtype})")
+        gpu = torch.cuda.get_device_name() if torch.cuda.is_available() else "no GPU"
+        logger.info(f"Loading model: {MODEL_ID} on {gpu} (compute dtype {dtype})")
         quantization = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_use_double_quant=True,

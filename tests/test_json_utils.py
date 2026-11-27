@@ -40,3 +40,24 @@ def test_call_wrapped_in_a_list():
 
 def test_prose_answer_is_not_json():
     assert extract_json("The daily limit is 67 g, so a can is about half of it.") is None
+
+
+# Real Gemma 4 E2B outputs from a Colab run.
+
+def test_raw_line_breaks_inside_strings():
+    text = '```json\n{"thought": "First line.\nSecond line.", "action": "search_products", "action_input": {"query": "Coca-Cola"}}\n```'
+    step = extract_json(text)
+    assert step["action"] == "search_products" and step["action_input"] == {"query": "Coca-Cola"}
+
+
+def test_stray_quote_before_closing_brace():
+    text = '```json\n{"thought": "Search for it.\n\nStep 2: search.", "action": "search_products", "action_input": {"query": "Coca-Cola"}"}\n```'
+    step = extract_json(text)
+    assert step["action"] == "search_products" and step["action_input"] == {"query": "Coca-Cola"}
+    assert step["thought"].startswith("Search for it.")
+
+
+def test_cut_off_output_keeps_the_action():
+    text = '{"thought": "Scale it.", "action": "scale_to_portion", "action_input": {"per_100g": {"sugars_g": 10.'
+    step = extract_json(text)
+    assert step["action"] == "scale_to_portion" and "action_input" not in step

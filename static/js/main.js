@@ -90,6 +90,15 @@ async function runAgent() {
   el.thinking.hidden = false;
   showStatus('running');
 
+  const thinkingText = el.thinking.querySelector('.thinking-text');
+  const startedAt = Date.now();
+  const tick = () => {
+    const seconds = Math.round((Date.now() - startedAt) / 1000);
+    thinkingText.textContent = `thinking… ${seconds}s (questions with several steps can take a few minutes; the first one also loads the model)`;
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+
   currentAbortController = new AbortController();
 
   try {
@@ -131,6 +140,7 @@ async function runAgent() {
       showToast(err.message || 'Execution error occurred');
     }
   } finally {
+    clearInterval(timer);
     state.isRunning = false;
     currentAbortController = null;
 

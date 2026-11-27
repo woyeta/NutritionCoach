@@ -99,7 +99,7 @@ def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=Non
         response = extract_json(text)
 
         if not isinstance(response, dict):
-            logger.warning(f"Turn {turn}: model output is not a JSON object: {text[:1000]!r}")
+            logger.warning(f"Turn {turn}: model output is not a JSON object: {text!r}")
             fields = {"error": "Invalid JSON response from model", "raw_response": text[:500]}
             if reject(turn, fields, ERR_MSG_INVALID_JSON):
                 return result(None, turn, "consecutive_errors")
@@ -130,7 +130,7 @@ def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=Non
         if not action:
             error, observation = "No action specified", ERR_MSG_NO_ACTION
             fields["raw_response"] = text[:500]
-            logger.warning(f"Turn {turn}: no action in model output: {text[:1000]!r}")
+            logger.warning(f"Turn {turn}: no action in model output: {text!r}")
         elif action not in nc.FUNCTIONS:
             error = f"Invalid action: '{action}'"
             fields["raw_response"] = text[:500]

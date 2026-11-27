@@ -16,6 +16,8 @@ If you have enough information, output a final JSON block:
 {{"thought": "...", "final_answer": "..."}}
 
 RULES:
+- Output ONE JSON object per step: one tool call or the final answer.
+- Keep "thought" to one or two short sentences about the next step only.
 - STOP generating immediately after closing the JSON block.
 - action_input MUST be a valid JSON object (double-quoted keys, no trailing commas).
 - Only call tools listed above; never fabricate tool names or results.

@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any, Dict, Optional, Tuple, Union
 
-_decoder = json.JSONDecoder()
+_decoder = json.JSONDecoder(strict=False)  # allow raw line breaks inside strings (models write them)
 
 
 def _strip_fences(raw: str) -> str:
@@ -71,7 +71,7 @@ def _as_step(value) -> Optional[Dict[str, Any]]:
 def _objects(text: str):
     """Yields every JSON object (or step in a list) that starts at a '{' or '[' in the text."""
     try:
-        step = _as_step(json.loads(text))
+        step = _as_step(_decoder.decode(text))
         if step is not None:
             yield step
     except json.JSONDecodeError:
@@ -87,6 +87,37 @@ def _objects(text: str):
                 yield step
 
 
+def _string_at(text: str, i: int) -> Optional[str]:
+    try:
+        value, _ = _decoder.raw_decode(text, i)
+    except json.JSONDecodeError:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def _repair_step(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Reads "thought", "action", "action_input" and "final_answer" one at a time, for
+    outputs that are almost JSON (e.g. a stray quote before the closing brace).
+    """
+    step = {}
+    for key in ("thought", "action", "final_answer"):
+        match = re.search(rf'"{key}"\s*:\s*(?=")', text)
+        if match:
+            value = _string_at(text, match.end())
+            if value is not None:
+                step[key] = value
+    match = re.search(r'"action_input"\s*:\s*(?=\{)', text)
+    if match:
+        try:
+            value, _ = _decoder.raw_decode(text, match.end())
+            if isinstance(value, dict):
+                step["action_input"] = value
+        except json.JSONDecodeError:
+            pass
+    return step if ("action" in step or "final_answer" in step) else None
+
+
 def extract_json(text: str) -> Optional[Dict[str, Any]]:
     """
     Extracts and parses a JSON object from text, returning None if parsing fails.
@@ -95,6 +126,7 @@ def extract_json(text: str) -> Optional[Dict[str, Any]]:
     commas removed, missing braces added), anywhere in the text, since models often write
     text before the JSON or keep generating after it. An object with step keys ("thought",
     "action", "final_answer") wins over any other object, such as a nested action_input.
+    If no complete step object is found, the step's fields are read one by one.
     """
     fallback = None
     for candidate in (_strip_fences(text), sanitize_json(text)):
@@ -102,7 +134,7 @@ def extract_json(text: str) -> Optional[Dict[str, Any]]:
             if any(k in obj for k in _STEP_KEYS):
                 return obj
             fallback = fallback or obj
-    return fallback
+    return _repair_step(_strip_fences(text)) or fallback
 
 
 def sanitize_model_response(response: str) -> Tuple[bool, Union[Dict[str, Any], str]]:
