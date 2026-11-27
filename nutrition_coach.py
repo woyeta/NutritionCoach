@@ -38,7 +38,7 @@ Functions:
 1. search_products(query, limit=3): Packaged products. `query` is a product name or a barcode. Returns name, brand, nutrients per 100 g, the data source, and when available: Nutri-Score, NOVA processing group, and allergens from the label.
 2. search_foods(query, limit=3): Basic foods (e.g. "banana", "cooked brown rice") from USDA FoodData Central. Returns nutrients per 100 g.
 3. calculate_daily_needs(sex, age, weight_kg, height_cm, activity, goal="maintain"): Daily calorie target and limits for an adult. sex: "male" or "female". age: 18-100. activity: "sedentary", "light", "moderate", "active" or "very_active". goal: "lose", "maintain" or "gain".
-4. scale_to_portion(per_100g, grams): Converts nutrients per 100 g (an object such as {"sugars_g": 12.5, "sodium_mg": 400}) to the amount in a portion of `grams`.
+4. scale_to_portion(per_100g, grams, food): Converts nutrients per 100 g (an object such as {"sugars_g": 12.5, "sodium_mg": 400}) to the amount in a portion of `grams`. `food` names the item, e.g. "Coca-Cola", so you can tell results apart.
 
 Nutrient keys: energy_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, sugars_g, fiber_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_c_mg, vitamin_d_ug. A missing key means the database has no value, not zero.
 
@@ -84,6 +84,7 @@ class DailyNeedsArgs(_Args):
 class PortionArgs(_Args):
     per_100g: dict[str, float]
     grams: float = Field(gt=0, le=3000)
+    food: str = Field("", max_length=100)
 
 
 # ── Food databases ──
@@ -278,8 +279,9 @@ def calculate_daily_needs(sex, age, weight_kg, height_cm, activity, goal="mainta
     }
 
 
-def scale_to_portion(per_100g: dict, grams: float) -> dict:
+def scale_to_portion(per_100g: dict, grams: float, food: str = "") -> dict:
     return {
+        "food": food or "(not named)",
         "grams": grams,
         "portion": {k: round(v * grams / 100, 1) for k, v in per_100g.items()},
     }
@@ -307,8 +309,10 @@ def run(action: str, args: dict) -> tuple[bool, str]:
     except (KeyError, TypeError, ValueError) as err:
         return (False, f"Could not read the food database response: {err}")
 
-    if isinstance(result, list):
-        result = {"results": result} if result else {"results": [], "note": "No matches found. Try a simpler query."}
+    if isinstance(result, list):  # searches: say what was searched for
+        result = {"query": args["query"], "results": result}
+        if not result["results"]:
+            result["note"] = "No matches found. Try a simpler query."
     return (True, json.dumps(result))
 
 

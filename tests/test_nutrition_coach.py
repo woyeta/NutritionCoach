@@ -73,6 +73,15 @@ def test_portion():
     assert obs["portion"] == {"sugars_g": 8.4, "energy_kcal": 80.8}
 
 
+def test_results_say_which_food_they_are_for(fake_http):
+    ok, obs = run("scale_to_portion", per_100g={"sugars_g": 11}, grams=330, food="Coca-Cola")
+    assert obs["food"] == "Coca-Cola" and obs["portion"] == {"sugars_g": 36.3}
+    ok, obs = run("scale_to_portion", per_100g={"sugars_g": 11}, grams=330)
+    assert obs["food"] == "(not named)"
+    ok, obs = run("search_foods", query="banana")
+    assert obs["query"] == "banana"
+
+
 def test_schemas_reject_minors_and_unknown_fields():
     minor = dict(sex="female", age=15, weight_kg=50, height_cm=160, activity="light")
     assert not validate_arguments(nc.DailyNeedsArgs, minor).ok

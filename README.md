@@ -49,6 +49,7 @@ templates/, static/ Web page
 tests/              Tests (no GPU or network needed)
 SAMPLE_QUESTIONS.md Sample questions and scenarios for demos and manual testing
 colab.ipynb         Run the app on a free Colab GPU
+kaggle.ipynb        Run the app on a free Kaggle GPU
 ```
 
 ## Running on Google Colab (recommended)
@@ -60,6 +61,17 @@ The model needs an NVIDIA GPU, so the easiest way to run it is Colab's free T4.
 3. In the Secrets panel (key icon), add `NGROK_AUTH_TOKEN` (free from ngrok) and, optionally, `FDC_API_KEY` (free from [api.data.gov](https://api.data.gov/signup/)). Turn on notebook access for both.
 4. Set `REPO_URL` in the first cell to your repo, then run both cells.
 5. Open the printed link. The first question takes a few minutes while the model downloads.
+
+## Running on Kaggle
+
+Kaggle's free notebooks also have T4 GPUs (phone verification needed).
+
+1. Push this repo to GitHub.
+2. At kaggle.com/code, create a notebook and choose File → Import notebook → [`kaggle.ipynb`](kaggle.ipynb).
+3. In Session options, set Accelerator to **GPU T4 x2** and turn **Internet** on.
+4. In Add-ons → Secrets, add `NGROK_AUTH_TOKEN` (and optionally `FDC_API_KEY`) and tick them for the notebook.
+5. Check `REPO_URL` in the first cell, then run both cells and open the printed link.
+6. Stop the session when you're done.
 
 ## Running locally
 
