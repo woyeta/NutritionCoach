@@ -153,3 +153,9 @@ def test_closing_notes_add_allergen_note_only_when_relevant():
     assert nc.ALLERGEN_NOTE in nc.closing_notes("Is this OK for my allergy?", "See the label.")
     plain = nc.closing_notes("How much sugar is in Nutella?", "56.3 g per 100 g.")
     assert plain == nc.DISCLAIMER  # "Nutella" and "nutrition" don't count as "nut"
+
+
+def test_percent_of_limit():
+    ok, obs = run("percent_of_limit", amount=3.8, limit=23, label="saturated fat in 40 g of Nutella")
+    assert obs["percent_of_limit"] == 16.5 and obs["label"].startswith("saturated fat")
+    assert not validate_arguments(nc.PercentArgs, {"amount": 1, "limit": 0}).ok

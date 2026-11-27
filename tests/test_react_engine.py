@@ -126,3 +126,20 @@ def test_no_action_error_shows_model_output():
 def test_default_allows_a_four_step_question_with_two_retries(fake_http):
     from prompts import DEFAULT_MAX_TURNS
     assert DEFAULT_MAX_TURNS >= 6
+
+
+def test_final_answer_written_as_a_tool_call():
+    # Seen from Gemma 4: the final answer sent as an action.
+    as_call = json.dumps({"thought": "t", "action": "final_answer",
+                          "action_input": {"final_answer": "Hello, nothing to look up."}})
+    result = react_loop("hi", generate=scripted([as_call]))
+    assert result["status"] == "success" and result["final_answer"] == "Hello, nothing to look up."
+
+
+def test_percentage_from_the_tool_is_grounded(fake_http):
+    gen = scripted([
+        call("percent_of_limit", amount=3.8, limit=23, label="saturated fat"),
+        final("40 g of Nutella has 3.8 g of saturated fat, 16.5% of your 23 g limit."),
+    ])
+    query = "If I eat 40 g of Nutella, how much of my saturated fat limit is that?"
+    assert react_loop(query, generate=gen)["status"] == "success"

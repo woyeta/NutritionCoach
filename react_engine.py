@@ -35,14 +35,32 @@ logger = logging.getLogger(__name__)
 _NAME_KEYS = ("tool", "tool_name", "function", "function_name", "name")
 _ARGS_KEYS = ("arguments", "parameters", "args", "input", "tool_input", "action_input")
 _ANSWER_KEYS = ("answer", "response", "final")
+_FINAL_ACTIONS = ("final_answer", "finalanswer", "final", "answer", "finish", "respond")
 
 
 def normalize_step(response: dict) -> dict:
     """
     Maps common alternative shapes from small models onto the expected keys:
-    {"name": "search_products", "arguments": {...}}, {"search_products": {...}}
-    and {"answer": "..."}. Anything else is returned unchanged.
+    {"name": "search_products", "arguments": {...}}, {"search_products": {...}},
+    {"answer": "..."}, and a final answer written as a tool call:
+    {"action": "final_answer", "action_input": {"final_answer": "..."}}.
+    Anything else is returned unchanged.
     """
+    action = response.get("action")
+    if isinstance(action, str) and action.strip().lower() in _FINAL_ACTIONS and not response.get("final_answer"):
+        action_input = response.get("action_input")
+        if isinstance(action_input, str):
+            try:
+                action_input = json.loads(action_input)
+            except json.JSONDecodeError:
+                pass
+        if isinstance(action_input, dict):
+            answer = next((action_input[k] for k in ("final_answer",) + _ANSWER_KEYS + ("text",)
+                           if isinstance(action_input.get(k), str) and action_input[k].strip()), None)
+        else:
+            answer = action_input if isinstance(action_input, str) and action_input.strip() else None
+        if answer:
+            return {"thought": response.get("thought", ""), "final_answer": answer}
     if response.get("action") or response.get("final_answer"):
         return response
     for name_key in _NAME_KEYS:

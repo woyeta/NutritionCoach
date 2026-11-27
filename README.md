@@ -22,7 +22,8 @@ sugars, fiber, sodium, potassium, calcium, iron, magnesium, vitamin C and vitami
 from 1 (unprocessed or minimally processed) to 4 (ultra-processed). Allergens come from Open Food Facts'
 "contains" and "may contain" label data; USDA results have none. [USDA FoodData Central](https://fdc.nal.usda.gov) (free key) |
 | `calculate_daily_needs(...)` | Calorie target plus sugar, saturated fat, sodium, fiber and protein guidelines for adults | Python (Mifflin-St Jeor, WHO limits) |
-| `scale_to_portion(per_100g, grams)` | Nutrients in a portion | Python |
+| `scale_to_portion(per_100g, grams, food)` | Nutrients in a portion | Python |
+| `percent_of_limit(amount, limit, label)` | What percent of a daily limit an amount is | Python |
 
 Each step of the loop ([`react_engine.py`](react_engine.py)) is checked before anything runs:
 

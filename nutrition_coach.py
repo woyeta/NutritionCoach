@@ -39,6 +39,7 @@ Functions:
 2. search_foods(query, limit=3): Basic foods (e.g. "banana", "cooked brown rice") from USDA FoodData Central. Returns nutrients per 100 g.
 3. calculate_daily_needs(sex, age, weight_kg, height_cm, activity, goal="maintain"): Daily calorie target and limits for an adult. sex: "male" or "female". age: 18-100. activity: "sedentary", "light", "moderate", "active" or "very_active". goal: "lose", "maintain" or "gain".
 4. scale_to_portion(per_100g, grams, food): Converts nutrients per 100 g (an object such as {"sugars_g": 12.5, "sodium_mg": 400}) to the amount in a portion of `grams`. `food` names the item, e.g. "Coca-Cola", so you can tell results apart.
+5. percent_of_limit(amount, limit, label): What percent `amount` is of `limit`, e.g. amount 3.8 (g of saturated fat in a portion) and limit 23 (daily maximum from calculate_daily_needs). `label` says what is being compared, e.g. "saturated fat in 40 g of Nutella".
 
 Nutrient keys: energy_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, sugars_g, fiber_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_c_mg, vitamin_d_ug. A missing key means the database has no value, not zero.
 
@@ -47,7 +48,7 @@ NOVA processing group: 1 = unprocessed or minimally processed, 2 = processed cul
 Allergens: "contains" and "may_contain" list what the label declares. The data is crowd-sourced and can be incomplete.
 
 Nutrition rules:
-- Every number in the final answer must come from a tool result. Never estimate nutrient values or do arithmetic yourself: use scale_to_portion for servings and calculate_daily_needs for targets.
+- Every number in the final answer must come from a tool result. Never estimate nutrient values or do arithmetic yourself: use scale_to_portion for servings, calculate_daily_needs for targets, and percent_of_limit for percentages.
 - If the user mentions a medical condition (e.g. diabetes, kidney disease, high blood pressure), pregnancy, an eating disorder, or is under 18, give general information only and advise them to see a doctor or registered dietitian.
 - Do not recommend supplements, medicines or very low-calorie diets.
 - Allergens: report only what "contains" and "may_contain" list. Never say a product is free of an allergen or safe for someone with an allergy, even if nothing is listed. Always tell the user to check the package label."""
@@ -79,6 +80,12 @@ class DailyNeedsArgs(_Args):
     height_cm: float = Field(gt=100, lt=250)
     activity: Literal["sedentary", "light", "moderate", "active", "very_active"]
     goal: Literal["lose", "maintain", "gain"] = "maintain"
+
+
+class PercentArgs(_Args):
+    amount: float = Field(ge=0)
+    limit: float = Field(gt=0)
+    label: str = Field("", max_length=100)
 
 
 class PortionArgs(_Args):
@@ -279,6 +286,15 @@ def calculate_daily_needs(sex, age, weight_kg, height_cm, activity, goal="mainta
     }
 
 
+def percent_of_limit(amount: float, limit: float, label: str = "") -> dict:
+    return {
+        "label": label or "(not named)",
+        "amount": amount,
+        "limit": limit,
+        "percent_of_limit": round(amount / limit * 100, 1),
+    }
+
+
 def scale_to_portion(per_100g: dict, grams: float, food: str = "") -> dict:
     return {
         "food": food or "(not named)",
@@ -294,6 +310,7 @@ FUNCTIONS = {
     "search_foods": (SearchArgs, search_foods),
     "calculate_daily_needs": (DailyNeedsArgs, calculate_daily_needs),
     "scale_to_portion": (PortionArgs, scale_to_portion),
+    "percent_of_limit": (PercentArgs, percent_of_limit),
 }
 
 
@@ -321,8 +338,8 @@ def run(action: str, args: dict) -> tuple[bool, str]:
 _NUMBER = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
 ERR_MSG_UNGROUNDED = (
     "Error: your final answer contains numbers that are not in any tool result: {numbers}. "
-    "Use only numbers from the observations, or call scale_to_portion or "
-    "calculate_daily_needs to compute them, then give the final answer again."
+    "Use only numbers from the observations, or call scale_to_portion, "
+    "calculate_daily_needs or percent_of_limit to compute them, then give the final answer again."
 )
 
 

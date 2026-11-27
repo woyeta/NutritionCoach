@@ -47,8 +47,8 @@ and the status at the end should be `success`. A yellow warning means a final-an
 
 | # | Question | Expected tools | A good answer |
 |---|---|---|---|
-| 5.1 | I'm a 28-year-old man, 75 kg, 180 cm, moderately active. How does a 330 ml can of Coca-Cola compare to my daily sugar limit? | `calculate_daily_needs` → `search_products` → `scale_to_portion` | Daily free-sugar limit **67 g**, sugar in 330 g of cola (about 35 g if the label says 10.6 g per 100 ml), and a plain-words comparison such as "about half" |
-| 5.2 | I'm a 30-year-old woman, 62 kg, 165 cm, moderately active. If I eat 40 g of Nutella, how much of my saturated fat limit is that? | `calculate_daily_needs` → `search_products` → `scale_to_portion` | Limit **18 g** and the saturated fat in 40 g |
+| 5.1 | I'm a 28-year-old man, 75 kg, 180 cm, moderately active. How does a 330 ml can of Coca-Cola compare to my daily sugar limit? | `calculate_daily_needs` → `search_products` → `scale_to_portion` → `percent_of_limit` | Daily free-sugar limit **67 g**, sugar in 330 g of cola (about 35 g if the label says 10.6 g per 100 ml), and a plain-words comparison such as "about half" |
+| 5.2 | I'm a 30-year-old woman, 62 kg, 165 cm, moderately active. If I eat 40 g of Nutella, how much of my saturated fat limit is that? | `calculate_daily_needs` → `search_products` → `scale_to_portion` → `percent_of_limit` | Limit **23 g** (goal not given, so maintain) and the saturated fat in 40 g, as a percentage of the limit |
 
 ## 6. Allergens
 
@@ -84,7 +84,7 @@ send the answer back once (an ERROR card saying "never claim"), and the second a
 ## Checks to watch for
 
 - **Numbers come from tools.** Every number in the answer should appear in an OBSERVE card, in the question, or be a rounded version of one. If not, an ERROR card saying "numbers that are not in any tool result" should appear.
-- **Percentages.** There is no percentage tool, so "52% of your daily limit" will be rejected as an unsupported number. A good answer describes it in words ("about half").
+- **Percentages.** Percentages should come from `percent_of_limit`. A percentage the model works out itself (e.g. "52% of your daily limit") is rejected as an unsupported number.
 - **Source.** Check the `source` field in OBSERVE cards. If Open Food Facts was busy, packaged products come from "USDA FoodData Central" instead, and they have no Nutri-Score, NOVA group or allergens.
 - **Notes.** Every answer ends with the not-medical-advice note, and allergen questions also get the "check the package label" note.
 
