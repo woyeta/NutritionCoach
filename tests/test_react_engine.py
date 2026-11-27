@@ -94,3 +94,12 @@ def test_tool_failure_is_fed_back(monkeypatch):
     gen = scripted([SEARCH, final("Sorry, the food database is unavailable.")])
     result = react_loop("q", generate=gen)
     assert "offline" in gen.seen[1][0]["observation"] and result["status"] == "success"
+
+
+def test_allergen_free_claim_is_rejected_once(fake_http):
+    claim = final("Nutella is gluten-free.")
+    fixed = final("Nutella lists milk, nuts and soybeans and may contain gluten. Check the label.")
+    gen = scripted([SEARCH, claim, fixed])
+    result = react_loop("Is Nutella gluten-free?", generate=gen)
+    assert "never claim" in gen.seen[2][-1]["observation"]
+    assert result["status"] == "success"

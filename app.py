@@ -7,7 +7,7 @@ import os
 
 from flask import Flask, jsonify, render_template, request
 
-from nutrition_coach import DISCLAIMER
+from nutrition_coach import closing_notes
 from prompts import MAX_TURNS_LIMIT, MODEL_ID
 from react_engine import react_loop
 
@@ -46,7 +46,7 @@ def ask():
         return jsonify({"success": False, "error": str(e)}), 500
 
     if result["final_answer"]:
-        result["final_answer"] += DISCLAIMER
+        result["final_answer"] += closing_notes(query, result["final_answer"])
         result["steps"][-1]["final_answer"] = result["final_answer"]
     return jsonify({"success": True, "result": result})
 

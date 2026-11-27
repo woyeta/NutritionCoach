@@ -14,8 +14,13 @@ Example questions:
 
 | Tool | What it does | Source |
 |---|---|---|
-| `search_products(query)` | Packaged products by name or barcode: Nutri-Score and nutrients per 100 g | [Open Food Facts](https://world.openfoodfacts.org) (no key); if its search is busy, USDA branded foods |
-| `search_foods(query)` | Basic foods (e.g. "banana"): nutrients per 100 g | [USDA FoodData Central](https://fdc.nal.usda.gov) (free key) |
+| `search_products(query)` | Packaged products by name or barcode: nutrients per 100 g, Nutri-Score, NOVA processing group, allergens from the label | [Open Food Facts](https://world.openfoodfacts.org) (no key); if its search is busy, USDA branded foods |
+| `search_foods(query)` | Basic foods (e.g. "banana"): nutrients per 100 g |
+
+Nutrients (per 100 g, when the database has them): calories, protein, fat, saturated fat, carbohydrates,
+sugars, fiber, sodium, potassium, calcium, iron, magnesium, vitamin C and vitamin D. The NOVA group runs
+from 1 (unprocessed or minimally processed) to 4 (ultra-processed). Allergens come from Open Food Facts'
+"contains" and "may contain" label data; USDA results have none. [USDA FoodData Central](https://fdc.nal.usda.gov) (free key) |
 | `calculate_daily_needs(...)` | Calorie target plus sugar, saturated fat, sodium, fiber and protein guidelines for adults | Python (Mifflin-St Jeor, WHO limits) |
 | `scale_to_portion(per_100g, grams)` | Nutrients in a portion | Python |
 
@@ -24,8 +29,8 @@ Each step of the loop ([`react_engine.py`](react_engine.py)) is checked before a
 - **Schema validation**: arguments are checked against each tool's pydantic model ([`nutrition_coach.py`](nutrition_coach.py)), e.g. ages under 18 are rejected. Errors are sent back to the model so it can fix the call.
 - **Guards**: a step limit, loop detection (a repeated identical call gets a warning, a second repeat ends the run), and a consecutive-error limit.
 - **Busy databases**: requests that get "busy" responses (429/503) are retried twice. If Open Food Facts' name search is still unavailable, the app searches USDA's branded foods instead. Results are cached in memory, which also keeps the app under Open Food Facts' search rate limit.
-- **Grounding check**: a final answer with a number that is not in any tool result (or the question) is sent back once. If the model does it again, the answer is shown with a warning (status `unverified`).
-- **Safety**: answers are for adults and end with a short not-medical-advice note. The model is told to refer medical conditions, pregnancy and eating disorders to a doctor or dietitian.
+- **Final-answer checks**: an answer is sent back once if it has a number that is not in any tool result (or the question), or if it claims a product is free of an allergen or safe for an allergy (for example "nut-free" or "contains no gluten"). Crowd-sourced allergen data can be incomplete, so the app never makes that claim. If the model does it again, the answer is shown with a warning (status `unverified`).
+- **Safety**: answers are for adults and end with a short not-medical-advice note, plus a "check the package label" note when the question or answer is about allergens. The model is told to refer medical conditions, pregnancy and eating disorders to a doctor or dietitian.
 
 ## Project structure
 

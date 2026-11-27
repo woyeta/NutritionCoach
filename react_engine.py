@@ -6,7 +6,8 @@ Every step is checked before anything runs: the output must be JSON, the functio
 exist, and the arguments must pass the function's schema. Rejected steps are fed back
 to the model as the observation so it can fix them. Guards stop the run on repeated
 identical calls, too many consecutive errors, or too many turns. Final answers must
-pass nutrition_coach.check_final (no numbers that aren't in a tool result).
+pass nutrition_coach.check_final (no numbers that aren't in a tool result, and no
+"allergen-free" claims).
 """
 
 import json

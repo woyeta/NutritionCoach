@@ -2,7 +2,7 @@ import json
 
 import react_engine
 from app import app
-from nutrition_coach import DISCLAIMER
+from nutrition_coach import ALLERGEN_NOTE, DISCLAIMER
 
 
 def test_ask_returns_answer_with_disclaimer(fake_http, monkeypatch):
@@ -15,6 +15,7 @@ def test_ask_returns_answer_with_disclaimer(fake_http, monkeypatch):
     body = app.test_client().post("/api/ask", json={"query": "Sugar in Nutella?"}).get_json()
     assert body["success"] and body["result"]["status"] == "success"
     assert body["result"]["final_answer"].endswith(DISCLAIMER)
+    assert ALLERGEN_NOTE not in body["result"]["final_answer"]
     assert body["result"]["steps"][-1]["final_answer"] == body["result"]["final_answer"]
 
 

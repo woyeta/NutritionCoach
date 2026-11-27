@@ -35,20 +35,30 @@ DISCLAIMER = (
 DOCUMENTATION = """Nutrition Coach: answers questions about food, nutrition labels and daily nutrition targets for adults, using real food databases and calculators.
 
 Functions:
-1. search_products(query, limit=3): Packaged products. `query` is a product name or a barcode. Returns name, brand, nutrients per 100 g, Nutri-Score when available, and the data source.
+1. search_products(query, limit=3): Packaged products. `query` is a product name or a barcode. Returns name, brand, nutrients per 100 g, the data source, and when available: Nutri-Score, NOVA processing group, and allergens from the label.
 2. search_foods(query, limit=3): Basic foods (e.g. "banana", "cooked brown rice") from USDA FoodData Central. Returns nutrients per 100 g.
 3. calculate_daily_needs(sex, age, weight_kg, height_cm, activity, goal="maintain"): Daily calorie target and limits for an adult. sex: "male" or "female". age: 18-100. activity: "sedentary", "light", "moderate", "active" or "very_active". goal: "lose", "maintain" or "gain".
 4. scale_to_portion(per_100g, grams): Converts nutrients per 100 g (an object such as {"sugars_g": 12.5, "sodium_mg": 400}) to the amount in a portion of `grams`.
 
-Nutrient keys: energy_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, sugars_g, fiber_g, sodium_mg.
+Nutrient keys: energy_kcal, protein_g, fat_g, saturated_fat_g, carbs_g, sugars_g, fiber_g, sodium_mg, potassium_mg, calcium_mg, iron_mg, magnesium_mg, vitamin_c_mg, vitamin_d_ug. A missing key means the database has no value, not zero.
+
+NOVA processing group: 1 = unprocessed or minimally processed, 2 = processed culinary ingredient, 3 = processed food, 4 = ultra-processed food.
+
+Allergens: "contains" and "may_contain" list what the label declares. The data is crowd-sourced and can be incomplete.
 
 Nutrition rules:
 - Every number in the final answer must come from a tool result. Never estimate nutrient values or do arithmetic yourself: use scale_to_portion for servings and calculate_daily_needs for targets.
 - If the user mentions a medical condition (e.g. diabetes, kidney disease, high blood pressure), pregnancy, an eating disorder, or is under 18, give general information only and advise them to see a doctor or registered dietitian.
-- Do not recommend supplements, medicines or very low-calorie diets."""
+- Do not recommend supplements, medicines or very low-calorie diets.
+- Allergens: report only what "contains" and "may_contain" list. Never say a product is free of an allergen or safe for someone with an allergy, even if nothing is listed. Always tell the user to check the package label."""
 
-NUTRIENT_KEYS = ["energy_kcal", "protein_g", "fat_g", "saturated_fat_g",
-                 "carbs_g", "sugars_g", "fiber_g", "sodium_mg"]
+ALLERGEN_NOTE = (
+    "\n\nAllergen information is crowd-sourced and may be incomplete or out of date. Always "
+    "check the package label, and don't rely on this app if you have a severe allergy."
+)
+
+NOVA_LABELS = {1: "unprocessed or minimally processed", 2: "processed culinary ingredient",
+               3: "processed food", 4: "ultra-processed food"}
 
 
 # ── Argument schemas ──
@@ -108,31 +118,63 @@ def _round(value):
     return None if value is None else round(float(value), 1)
 
 
+# Open Food Facts nutriment → (our key, multiplier). OFF stores *_100g values in grams.
+_OFF_NUTRIENTS = {
+    "energy-kcal_100g": ("energy_kcal", 1),
+    "proteins_100g": ("protein_g", 1),
+    "fat_100g": ("fat_g", 1),
+    "saturated-fat_100g": ("saturated_fat_g", 1),
+    "carbohydrates_100g": ("carbs_g", 1),
+    "sugars_100g": ("sugars_g", 1),
+    "fiber_100g": ("fiber_g", 1),
+    "sodium_100g": ("sodium_mg", 1000),
+    "potassium_100g": ("potassium_mg", 1000),
+    "calcium_100g": ("calcium_mg", 1000),
+    "iron_100g": ("iron_mg", 1000),
+    "magnesium_100g": ("magnesium_mg", 1000),
+    "vitamin-c_100g": ("vitamin_c_mg", 1000),
+    "vitamin-d_100g": ("vitamin_d_ug", 1_000_000),
+}
+
+
+def _tag_names(tags) -> list[str]:
+    """["en:milk", "en:soybeans"] → ["milk", "soybeans"]."""
+    return [t.split(":", 1)[-1].replace("-", " ") for t in (tags or []) if isinstance(t, str)]
+
+
 def _off_product(p: dict) -> dict:
     n = p.get("nutriments", {}) or {}
-    sodium_g = n.get("sodium_100g")
-    nutrients = {
-        "energy_kcal": n.get("energy-kcal_100g"),
-        "protein_g": n.get("proteins_100g"),
-        "fat_g": n.get("fat_100g"),
-        "saturated_fat_g": n.get("saturated-fat_100g"),
-        "carbs_g": n.get("carbohydrates_100g"),
-        "sugars_g": n.get("sugars_100g"),
-        "fiber_g": n.get("fiber_100g"),
-        "sodium_mg": None if sodium_g is None else float(sodium_g) * 1000,
-    }
-    return {
+    per_100g = {}
+    for off_key, (key, factor) in _OFF_NUTRIENTS.items():
+        value = n.get(off_key)
+        if value in (None, ""):
+            continue
+        try:
+            per_100g[key] = _round(float(value) * factor)
+        except (TypeError, ValueError):
+            pass  # crowd-sourced data: skip unreadable values
+
+    product = {
         "name": p.get("product_name") or "(unnamed)",
         "brand": p.get("brands") or "",
         "barcode": p.get("code", ""),
         "nutri_score": (p.get("nutriscore_grade") or "unknown").upper(),
         "serving_size": p.get("serving_size") or "",
-        "per_100g": {k: _round(v) for k, v in nutrients.items() if v not in (None, "")},
-        "source": "Open Food Facts",
+        "per_100g": per_100g,
     }
+    if p.get("nova_group") in NOVA_LABELS:
+        product["nova_group"] = p["nova_group"]
+        product["nova_label"] = NOVA_LABELS[p["nova_group"]]
+    product["allergens"] = {
+        "contains": _tag_names(p.get("allergens_tags")),
+        "may_contain": _tag_names(p.get("traces_tags")),
+        "note": "From the label as entered by volunteers; may be incomplete. Check the package.",
+    }
+    product["source"] = "Open Food Facts"
+    return product
 
 
-_OFF_FIELDS = "code,product_name,brands,nutriscore_grade,serving_size,nutriments"
+_OFF_FIELDS = "code,product_name,brands,nutriscore_grade,nova_group,serving_size,nutriments,allergens_tags,traces_tags"
 
 
 def search_products(query: str, limit: int = 3) -> list:
@@ -157,15 +199,22 @@ def search_products(query: str, limit: int = 3) -> list:
 
 
 # USDA nutrient names → our keys (values are per 100 g for these data types).
+# USDA nutrient name → (our key, required unit). The unit check skips e.g. vitamin D in IU.
 _FDC_NUTRIENTS = {
-    "Protein": "protein_g",
-    "Total lipid (fat)": "fat_g",
-    "Fatty acids, total saturated": "saturated_fat_g",
-    "Carbohydrate, by difference": "carbs_g",
-    "Sugars, total including NLEA": "sugars_g",
-    "Total Sugars": "sugars_g",
-    "Fiber, total dietary": "fiber_g",
-    "Sodium, Na": "sodium_mg",
+    "Protein": ("protein_g", "G"),
+    "Total lipid (fat)": ("fat_g", "G"),
+    "Fatty acids, total saturated": ("saturated_fat_g", "G"),
+    "Carbohydrate, by difference": ("carbs_g", "G"),
+    "Sugars, total including NLEA": ("sugars_g", "G"),
+    "Total Sugars": ("sugars_g", "G"),
+    "Fiber, total dietary": ("fiber_g", "G"),
+    "Sodium, Na": ("sodium_mg", "MG"),
+    "Potassium, K": ("potassium_mg", "MG"),
+    "Calcium, Ca": ("calcium_mg", "MG"),
+    "Iron, Fe": ("iron_mg", "MG"),
+    "Magnesium, Mg": ("magnesium_mg", "MG"),
+    "Vitamin C, total ascorbic acid": ("vitamin_c_mg", "MG"),
+    "Vitamin D (D2 + D3)": ("vitamin_d_ug", "UG"),
 }
 
 
@@ -177,12 +226,13 @@ def _fdc_food(food: dict) -> dict:
             continue
         if name.startswith("Energy") and unit == "KCAL":
             per_100g.setdefault("energy_kcal", _round(value))
-        elif name in _FDC_NUTRIENTS:
-            per_100g.setdefault(_FDC_NUTRIENTS[name], _round(value))
+        elif name in _FDC_NUTRIENTS and unit == _FDC_NUTRIENTS[name][1]:
+            per_100g.setdefault(_FDC_NUTRIENTS[name][0], _round(value))
     food_info = {"name": food.get("description", ""), "fdc_id": food.get("fdcId")}
     if food.get("brandOwner") or food.get("brandName"):  # branded (packaged) food
         food_info["brand"] = food.get("brandName") or food.get("brandOwner")
         food_info["barcode"] = food.get("gtinUpc", "")
+        food_info["allergens"] = "Not provided by this source. Check the ingredients on the package."
     food_info["per_100g"] = per_100g
     food_info["source"] = "USDA FoodData Central"
     return food_info
@@ -262,7 +312,7 @@ def run(action: str, args: dict) -> tuple[bool, str]:
     return (True, json.dumps(result))
 
 
-# ── Grounding check ──
+# ── Final-answer checks ──
 
 _NUMBER = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
 ERR_MSG_UNGROUNDED = (
@@ -290,8 +340,42 @@ def ungrounded_numbers(final_answer: str, sources: list[str]) -> list[float]:
     return missing
 
 
+_ALLERGENS = (r"(?:allergens?|nuts?|peanuts?|tree nuts?|gluten|wheat|milk|dairy|lactose|eggs?|soy|soya|"
+              r"sesame|fish|shellfish|crustaceans?|molluscs?|mustard|celery|lupin|sulph?ites?)")
+_ALLERGEN_FREE_CLAIM = re.compile(
+    rf"\b(?:{_ALLERGENS}[- ]free"
+    rf"|free (?:of|from) (?:any |all )?{_ALLERGENS}"
+    rf"|(?:does not|doesn['’]t|do not|don['’]t) contain (?:any )?{_ALLERGENS}"
+    rf"|contains no {_ALLERGENS}"
+    rf"|no {_ALLERGENS} (?:listed|present|in it)"
+    rf"|safe for (?:people|someone|anyone|you|those)?[\w ]{{0,20}}?(?:allerg|intoleran|coeliac|celiac))",
+    re.IGNORECASE,
+)
+_ALLERGY_TOPIC = re.compile(rf"\b{_ALLERGENS}\b|allerg|intoleran|coeliac|celiac|may contain|traces", re.IGNORECASE)
+
+ERR_MSG_ALLERGEN_CLAIM = (
+    "Error: your final answer says a product is free of an allergen or safe for an allergy "
+    "(\"{claim}\"). The data can be incomplete, so never claim that. Report only what "
+    "\"contains\" and \"may_contain\" list, tell the user to check the package label, and "
+    "give the final answer again."
+)
+
+
+def allergen_free_claim(final_answer: str) -> str | None:
+    """Returns the first "free of / safe for" allergen claim in the answer, if any."""
+    match = _ALLERGEN_FREE_CLAIM.search(final_answer)
+    return match.group(0) if match else None
+
+
 def check_final(final_answer: str, history: list, user_query: str) -> str | None:
-    """Returns an error observation if the final answer uses unsupported numbers, else None."""
+    """
+    Returns an error observation if the final answer uses numbers that aren't in any
+    tool result or claims a product is allergen-free; otherwise None.
+    """
+    claim = allergen_free_claim(final_answer)
+    if claim:
+        return ERR_MSG_ALLERGEN_CLAIM.format(claim=claim)
+
     sources = [user_query] + [
         str(h.get("observation", "")) for h in history
         if not str(h.get("observation", "")).startswith("Error:")  # skip our own error messages
@@ -301,3 +385,11 @@ def check_final(final_answer: str, history: list, user_query: str) -> str | None
         return None
     shown = ", ".join(f"{x:g}" for x in missing[:5])
     return ERR_MSG_UNGROUNDED.format(numbers=shown)
+
+
+def closing_notes(user_query: str, final_answer: str) -> str:
+    """Fixed notes added to every answer: the disclaimer, plus an allergen note when relevant."""
+    notes = DISCLAIMER
+    if _ALLERGY_TOPIC.search(user_query) or _ALLERGY_TOPIC.search(final_answer):
+        notes += ALLERGEN_NOTE
+    return notes

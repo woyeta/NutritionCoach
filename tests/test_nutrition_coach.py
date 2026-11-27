@@ -20,6 +20,18 @@ def test_search_products_normalizes_open_food_facts(fake_http):
     assert "search.pl" in fake_http[0]
 
 
+def test_open_food_facts_vitamins_nova_and_allergens(fake_http):
+    ok, obs = run("search_products", query="nutella")
+    product = obs["results"][0]
+    assert product["per_100g"]["calcium_mg"] == 108.0
+    assert product["per_100g"]["iron_mg"] == 4.4
+    assert product["per_100g"]["vitamin_d_ug"] == 2.5
+    assert "potassium_mg" not in product["per_100g"]  # unreadable value is skipped, not zero
+    assert product["nova_group"] == 4 and product["nova_label"] == "ultra-processed food"
+    assert product["allergens"]["contains"] == ["milk", "nuts", "soybeans"]
+    assert product["allergens"]["may_contain"] == ["gluten"]
+
+
 def test_barcode_uses_product_endpoint(fake_http):
     ok, obs = run("search_products", query="3017620422003")
     assert ok and obs["results"][0]["barcode"] == "3017620422003"
@@ -29,7 +41,8 @@ def test_barcode_uses_product_endpoint(fake_http):
 def test_search_foods_normalizes_usda(fake_http):
     ok, obs = run("search_foods", query="banana")
     assert ok and obs["results"][0]["per_100g"] == {
-        "energy_kcal": 89.0, "protein_g": 1.1, "sugars_g": 12.2, "sodium_mg": 1.0}
+        "energy_kcal": 89.0, "protein_g": 1.1, "sugars_g": 12.2, "sodium_mg": 1.0,
+        "potassium_mg": 358.0, "vitamin_c_mg": 8.7}  # vitamin D in IU is skipped
 
 
 def test_network_error_is_a_failed_call(monkeypatch):
@@ -106,6 +119,7 @@ def test_falls_back_to_usda_when_open_food_facts_stays_busy(monkeypatch):
     result = obs["results"][0]
     assert ok and result["source"] == "USDA FoodData Central" and result["brand"] == "Ferrero"
     assert result["per_100g"] == {"sugars_g": 56.8}
+    assert "Not provided" in result["allergens"]
     assert sum("openfoodfacts" in u for u in calls) == nc.RETRIES + 1
 
 
@@ -113,3 +127,20 @@ def test_results_are_cached(fake_http):
     run("search_foods", query="banana")
     run("search_foods", query="banana")
     assert len(fake_http) == 1
+
+
+def test_allergen_free_claims_are_caught():
+    for text in ["This spread is nut-free.", "It is free from gluten.", "It doesn't contain any milk.",
+                 "Contains no peanuts.", "It's safe for people with nut allergies.", "No allergens listed."]:
+        assert nc.allergen_free_claim(text), text
+    for text in ["It contains milk, nuts and soybeans. Check the label.",
+                 "Nutella has 56.3 g of sugar per 100 g.", "It may contain traces of gluten."]:
+        assert nc.allergen_free_claim(text) is None, text
+    assert "never claim" in nc.check_final("It is gluten-free.", [], "q")
+
+
+def test_closing_notes_add_allergen_note_only_when_relevant():
+    assert nc.ALLERGEN_NOTE in nc.closing_notes("Does Nutella contain nuts?", "It contains nuts.")
+    assert nc.ALLERGEN_NOTE in nc.closing_notes("Is this OK for my allergy?", "See the label.")
+    plain = nc.closing_notes("How much sugar is in Nutella?", "56.3 g per 100 g.")
+    assert plain == nc.DISCLAIMER  # "Nutella" and "nutrition" don't count as "nut"

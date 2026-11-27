@@ -211,7 +211,7 @@ function renderStatusMessage(status) {
     max_turns_reached: 'Agent reached maximum turns without a final answer',
     consecutive_errors: 'Agent encountered 3 consecutive errors',
     loop_detected: 'Agent stopped after repeating the same tool call',
-    unverified: 'Some numbers in this answer were not found in the tool results. Double-check them.',
+    unverified: 'This answer failed an automatic check (a number not found in the tool results, or an allergen-free claim). Double-check it.',
   };
 
   const card = document.createElement('div');
