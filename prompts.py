@@ -61,7 +61,7 @@ ERR_MSG_API_FAIL = (
     "Error: API call failed or returned an invalid response. Details: {api_response}"
 )
 
-MODEL_ID = os.environ.get("MODEL_ID", "google/gemma-4-E2B-it")  # or google/gemma-4-E4B-it
+MODEL_ID = os.environ.get("MODEL_ID", "google/gemma-4-E4B-it")  # or google/gemma-4-E2B-it (smaller, faster)
 MAX_NEW_TOKENS = 512
 DEFAULT_MAX_TURNS = 8  # a multi-step question needs ~4 turns, plus room for retries
 MAX_TURNS_LIMIT = 10

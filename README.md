@@ -74,7 +74,7 @@ python app.py            # then open http://localhost:5000
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MODEL_ID` | `google/gemma-4-E2B-it` | Any Gemma 4 instruct model, e.g. `google/gemma-4-E4B-it` (larger, more accurate) |
+| `MODEL_ID` | `google/gemma-4-E4B-it` | Any Gemma 4 instruct model, e.g. `google/gemma-4-E2B-it` (smaller and faster, but makes more formatting mistakes) |
 | `FDC_API_KEY` | `DEMO_KEY` | USDA key; the demo key is rate-limited |
 | `PORT` | `5000` | Web server port |
 | `FLASK_DEBUG` | `false` | Flask debug mode |
