@@ -1,0 +1,11 @@
+flask
+torch
+transformers
+accelerate
+bitsandbytes
+sentencepiece
+protobuf
+requests
+pydantic>=2.6
+pyngrok
+pytest
