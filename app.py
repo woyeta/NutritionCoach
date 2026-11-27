@@ -8,7 +8,7 @@ import os
 from flask import Flask, jsonify, render_template, request
 
 from nutrition_coach import closing_notes
-from prompts import MAX_TURNS_LIMIT, MODEL_ID
+from prompts import DEFAULT_MAX_TURNS, MAX_TURNS_LIMIT, MODEL_ID
 from react_engine import react_loop
 
 app = Flask(__name__)
@@ -29,10 +29,10 @@ def health():
 
 @app.route("/api/ask", methods=["POST"])
 def ask():
-    """Runs the agent on a question: {"query": "...", "max_turns": 5}."""
+    """Runs the agent on a question: {"query": "...", "max_turns": 8}."""
     data = request.get_json(silent=True) or {}
     query = data.get("query", "").strip() if isinstance(data.get("query"), str) else ""
-    max_turns = data.get("max_turns", 5)
+    max_turns = data.get("max_turns", DEFAULT_MAX_TURNS)
 
     if not query:
         return jsonify({"success": False, "error": "query is required"}), 400

@@ -17,6 +17,7 @@ import nutrition_coach as nc
 from agent_format import Generation, history_entry
 from json_utils import extract_json
 from prompts import (
+    DEFAULT_MAX_TURNS,
     ERR_MSG_API_FAIL,
     ERR_MSG_INVALID_ACTION,
     ERR_MSG_INVALID_ARGS,
@@ -31,12 +32,40 @@ from tool_schema import call_key, validate_arguments
 logger = logging.getLogger(__name__)
 
 
+_NAME_KEYS = ("tool", "tool_name", "function", "function_name", "name")
+_ARGS_KEYS = ("arguments", "parameters", "args", "input", "tool_input", "action_input")
+_ANSWER_KEYS = ("answer", "response", "final")
+
+
+def normalize_step(response: dict) -> dict:
+    """
+    Maps common alternative shapes from small models onto the expected keys:
+    {"name": "search_products", "arguments": {...}}, {"search_products": {...}}
+    and {"answer": "..."}. Anything else is returned unchanged.
+    """
+    if response.get("action") or response.get("final_answer"):
+        return response
+    for name_key in _NAME_KEYS:
+        name = response.get(name_key)
+        if isinstance(name, str) and name in nc.FUNCTIONS:
+            args = next((response[k] for k in _ARGS_KEYS if k in response), {})
+            return {**response, "action": name, "action_input": args}
+    for name in nc.FUNCTIONS:
+        if isinstance(response.get(name), dict):
+            return {**response, "action": name, "action_input": response[name]}
+    for answer_key in _ANSWER_KEYS:
+        answer = response.get(answer_key)
+        if isinstance(answer, str) and answer.strip():
+            return {**response, "final_answer": answer}
+    return response
+
+
 def _default_generate(user_query: str, history: list) -> Generation:
     from model_loader import run_inference
     return run_inference(user_query, nc.DOCUMENTATION, history)
 
 
-def react_loop(user_query: str, max_turns: int = 5, generate=None) -> dict:
+def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=None) -> dict:
     """
     Answers a query. `generate(query, history)` returns a Generation (or str); it
     defaults to the Gemma model and can be replaced in tests.
@@ -76,6 +105,7 @@ def react_loop(user_query: str, max_turns: int = 5, generate=None) -> dict:
                 return result(None, turn, "consecutive_errors")
             continue
 
+        response = normalize_step(response)
         thought = response.get("thought", "")
 
         # Final answer
@@ -99,8 +129,11 @@ def react_loop(user_query: str, max_turns: int = 5, generate=None) -> dict:
 
         if not action:
             error, observation = "No action specified", ERR_MSG_NO_ACTION
+            fields["raw_response"] = text[:500]
+            logger.warning(f"Turn {turn}: no action in model output: {text[:1000]!r}")
         elif action not in nc.FUNCTIONS:
             error = f"Invalid action: '{action}'"
+            fields["raw_response"] = text[:500]
             observation = ERR_MSG_INVALID_ACTION.format(tool_functions_list=", ".join(nc.FUNCTIONS))
         else:
             validation = validate_arguments(nc.FUNCTIONS[action][0], action_input)

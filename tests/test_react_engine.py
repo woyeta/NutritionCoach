@@ -103,3 +103,26 @@ def test_allergen_free_claim_is_rejected_once(fake_http):
     result = react_loop("Is Nutella gluten-free?", generate=gen)
     assert "never claim" in gen.seen[2][-1]["observation"]
     assert result["status"] == "success"
+
+
+def test_alternative_call_shapes_are_accepted(fake_http):
+    gen = scripted([
+        json.dumps({"name": "search_products", "arguments": {"query": "nutella"}}),
+        json.dumps({"scale_to_portion": {"per_100g": {"sugars_g": 56.3}, "grams": 15}}),
+        json.dumps({"answer": "A 15 g serving has 8.4 g of sugar."}),
+    ])
+    result = react_loop("Sugar in 15 g of Nutella?", generate=gen)
+    assert result["status"] == "success"
+    assert [s.get("action") for s in result["steps"][:2]] == ["search_products", "scale_to_portion"]
+
+
+def test_no_action_error_shows_model_output():
+    gen = scripted([json.dumps({"query": "cola"}), final("done")])
+    result = react_loop("q", generate=gen)
+    assert result["steps"][0]["error"] == "No action specified"
+    assert '"query": "cola"' in result["steps"][0]["raw_response"]
+
+
+def test_default_allows_a_four_step_question_with_two_retries(fake_http):
+    from prompts import DEFAULT_MAX_TURNS
+    assert DEFAULT_MAX_TURNS >= 6

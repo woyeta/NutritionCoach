@@ -61,5 +61,6 @@ ERR_MSG_API_FAIL = (
 
 MODEL_ID = os.environ.get("MODEL_ID", "google/gemma-4-E2B-it")  # or google/gemma-4-E4B-it
 MAX_NEW_TOKENS = 512
-MAX_TURNS_LIMIT = 8
+DEFAULT_MAX_TURNS = 8  # a multi-step question needs ~4 turns, plus room for retries
+MAX_TURNS_LIMIT = 10
 MAX_CONSECUTIVE_ERRORS = 3
