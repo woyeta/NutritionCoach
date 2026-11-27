@@ -32,6 +32,8 @@ Each step of the loop ([`react_engine.py`](react_engine.py)) is checked before a
 - **Final-answer checks**: an answer is sent back once if it has a number that is not in any tool result (or the question), or if it claims a product is free of an allergen or safe for an allergy (for example "nut-free" or "contains no gluten"). Crowd-sourced allergen data can be incomplete, so the app never makes that claim. If the model does it again, the answer is shown with a warning (status `unverified`).
 - **Safety**: answers are for adults and end with a short not-medical-advice note, plus a "check the package label" note when the question or answer is about allergens. The model is told to refer medical conditions, pregnancy and eating disorders to a doctor or dietitian.
 
+See [SAMPLE_QUESTIONS.md](SAMPLE_QUESTIONS.md) for more questions and test scenarios, with expected results.
+
 ## Project structure
 
 ```
@@ -45,6 +47,7 @@ model_loader.py     Loads Gemma 4 from Hugging Face in 4-bit
 prompts.py          System prompt, error messages, settings
 templates/, static/ Web page
 tests/              Tests (no GPU or network needed)
+SAMPLE_QUESTIONS.md Sample questions and scenarios for demos and manual testing
 colab.ipynb         Run the app on a free Colab GPU
 ```
 
