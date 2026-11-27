@@ -80,3 +80,36 @@ def test_grounding():
 def test_check_final_ignores_error_messages():
     history = [{"action": "", "action_input": "", "observation": "Error: ... numbers: 9.9"}]
     assert nc.check_final("It has 9.9 g sugar.", history, "q") is not None
+
+
+def test_busy_search_is_retried(monkeypatch):
+    from conftest import FakeResponse, OFF_PRODUCT
+    responses = iter([FakeResponse({}, 503), FakeResponse({"products": [OFF_PRODUCT]})])
+    monkeypatch.setattr(nc.requests, "get", lambda url, **kw: next(responses))
+    ok, obs = run("search_products", query="nutella")
+    assert ok and obs["results"][0]["source"] == "Open Food Facts"
+
+
+def test_falls_back_to_usda_when_open_food_facts_stays_busy(monkeypatch):
+    from conftest import FakeResponse
+    branded = {"foods": [{"description": "HAZELNUT SPREAD", "fdcId": 1, "brandOwner": "Ferrero",
+                          "gtinUpc": "009800800056", "foodNutrients": [
+                              {"nutrientName": "Total Sugars", "unitName": "G", "value": 56.8}]}]}
+    calls = []
+
+    def get(url, params=None, **kw):
+        calls.append(url)
+        return FakeResponse(branded) if "nal.usda.gov" in url else FakeResponse({}, 503)
+
+    monkeypatch.setattr(nc.requests, "get", get)
+    ok, obs = run("search_products", query="nutella")
+    result = obs["results"][0]
+    assert ok and result["source"] == "USDA FoodData Central" and result["brand"] == "Ferrero"
+    assert result["per_100g"] == {"sugars_g": 56.8}
+    assert sum("openfoodfacts" in u for u in calls) == nc.RETRIES + 1
+
+
+def test_results_are_cached(fake_http):
+    run("search_foods", query="banana")
+    run("search_foods", query="banana")
+    assert len(fake_http) == 1

@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Literal
 
 import requests
@@ -21,7 +22,10 @@ logger = logging.getLogger(__name__)
 OFF_URL = "https://world.openfoodfacts.org"
 FDC_URL = "https://api.nal.usda.gov/fdc/v1"
 HTTP_TIMEOUT_S = 10
-HEADERS = {"User-Agent": "AgentLoop-NutritionCoach/1.0"}  # Open Food Facts asks for one
+HEADERS = {"User-Agent": "NutritionCoach/1.0 (student project)"}  # Open Food Facts asks for one
+RETRY_STATUS = {429, 502, 503, 504}  # "busy, try again" (Open Food Facts uses 503 for rate limits)
+RETRIES = 2
+RETRY_DELAY_S = 2.0
 
 DISCLAIMER = (
     "\n\nGeneral nutrition information, not medical advice. If you have a health "
@@ -31,7 +35,7 @@ DISCLAIMER = (
 DOCUMENTATION = """Nutrition Coach: answers questions about food, nutrition labels and daily nutrition targets for adults, using real food databases and calculators.
 
 Functions:
-1. search_products(query, limit=3): Packaged products from Open Food Facts. `query` is a product name or a barcode. Returns name, brand, Nutri-Score and nutrients per 100 g.
+1. search_products(query, limit=3): Packaged products. `query` is a product name or a barcode. Returns name, brand, nutrients per 100 g, Nutri-Score when available, and the data source.
 2. search_foods(query, limit=3): Basic foods (e.g. "banana", "cooked brown rice") from USDA FoodData Central. Returns nutrients per 100 g.
 3. calculate_daily_needs(sex, age, weight_kg, height_cm, activity, goal="maintain"): Daily calorie target and limits for an adult. sex: "male" or "female". age: 18-100. activity: "sedentary", "light", "moderate", "active" or "very_active". goal: "lose", "maintain" or "gain".
 4. scale_to_portion(per_100g, grams): Converts nutrients per 100 g (an object such as {"sugars_g": 12.5, "sodium_mg": 400}) to the amount in a portion of `grams`.
@@ -74,6 +78,32 @@ class PortionArgs(_Args):
 
 # ── Food databases ──
 
+_cache: dict = {}
+
+
+def _get_json(url: str, params: dict | None = None) -> dict:
+    """GET with retries on busy/rate-limit responses and a small in-memory cache."""
+    key = (url, json.dumps(params or {}, sort_keys=True))
+    if key in _cache:
+        return _cache[key]
+    for attempt in range(RETRIES + 1):
+        last_try = attempt == RETRIES
+        try:
+            r = requests.get(url, params=params, headers=HEADERS, timeout=HTTP_TIMEOUT_S)
+        except (requests.ConnectionError, requests.Timeout):
+            if last_try:
+                raise
+        else:
+            if r.status_code not in RETRY_STATUS or last_try:
+                r.raise_for_status()
+                body = r.json()
+                if len(_cache) > 256:
+                    _cache.clear()
+                _cache[key] = body
+                return body
+        time.sleep(RETRY_DELAY_S * (attempt + 1))
+
+
 def _round(value):
     return None if value is None else round(float(value), 1)
 
@@ -98,6 +128,7 @@ def _off_product(p: dict) -> dict:
         "nutri_score": (p.get("nutriscore_grade") or "unknown").upper(),
         "serving_size": p.get("serving_size") or "",
         "per_100g": {k: _round(v) for k, v in nutrients.items() if v not in (None, "")},
+        "source": "Open Food Facts",
     }
 
 
@@ -105,20 +136,24 @@ _OFF_FIELDS = "code,product_name,brands,nutriscore_grade,serving_size,nutriments
 
 
 def search_products(query: str, limit: int = 3) -> list:
+    """
+    Open Food Facts by barcode or name. Name search is rate-limited and often busy, so if it
+    still fails after retries, falls back to USDA's branded (packaged) foods.
+    """
     query = query.strip()
     if re.fullmatch(r"\d{8,14}", query):
-        r = requests.get(f"{OFF_URL}/api/v2/product/{query}.json",
-                         params={"fields": _OFF_FIELDS}, headers=HEADERS, timeout=HTTP_TIMEOUT_S)
-        r.raise_for_status()
-        body = r.json()
+        body = _get_json(f"{OFF_URL}/api/v2/product/{query}.json", {"fields": _OFF_FIELDS})
         return [_off_product(body["product"])] if body.get("product") else []
 
-    r = requests.get(f"{OFF_URL}/cgi/search.pl", params={
-        "search_terms": query, "search_simple": 1, "action": "process", "json": 1,
-        "page_size": limit, "fields": _OFF_FIELDS,
-    }, headers=HEADERS, timeout=HTTP_TIMEOUT_S)
-    r.raise_for_status()
-    return [_off_product(p) for p in r.json().get("products", [])[:limit]]
+    try:
+        body = _get_json(f"{OFF_URL}/cgi/search.pl", {
+            "search_terms": query, "search_simple": 1, "action": "process", "json": 1,
+            "page_size": limit, "fields": _OFF_FIELDS,
+        })
+        return [_off_product(p) for p in body.get("products", [])[:limit]]
+    except requests.RequestException as err:
+        logger.warning(f"Open Food Facts search failed ({err}); falling back to USDA branded foods")
+        return _fdc_search(query, limit, "Branded")
 
 
 # USDA nutrient names → our keys (values are per 100 g for these data types).
@@ -144,16 +179,25 @@ def _fdc_food(food: dict) -> dict:
             per_100g.setdefault("energy_kcal", _round(value))
         elif name in _FDC_NUTRIENTS:
             per_100g.setdefault(_FDC_NUTRIENTS[name], _round(value))
-    return {"name": food.get("description", ""), "fdc_id": food.get("fdcId"), "per_100g": per_100g}
+    food_info = {"name": food.get("description", ""), "fdc_id": food.get("fdcId")}
+    if food.get("brandOwner") or food.get("brandName"):  # branded (packaged) food
+        food_info["brand"] = food.get("brandName") or food.get("brandOwner")
+        food_info["barcode"] = food.get("gtinUpc", "")
+    food_info["per_100g"] = per_100g
+    food_info["source"] = "USDA FoodData Central"
+    return food_info
+
+
+def _fdc_search(query: str, limit: int, data_type: str) -> list:
+    body = _get_json(f"{FDC_URL}/foods/search", {
+        "query": query, "pageSize": limit, "dataType": data_type,
+        "api_key": os.environ.get("FDC_API_KEY", "DEMO_KEY"),
+    })
+    return [_fdc_food(f) for f in body.get("foods", [])[:limit]]
 
 
 def search_foods(query: str, limit: int = 3) -> list:
-    r = requests.get(f"{FDC_URL}/foods/search", params={
-        "query": query, "pageSize": limit, "dataType": "Foundation,SR Legacy",
-        "api_key": os.environ.get("FDC_API_KEY", "DEMO_KEY"),
-    }, headers=HEADERS, timeout=HTTP_TIMEOUT_S)
-    r.raise_for_status()
-    return [_fdc_food(f) for f in r.json().get("foods", [])[:limit]]
+    return _fdc_search(query, limit, "Foundation,SR Legacy")
 
 
 # ── Calculators ──

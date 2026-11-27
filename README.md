@@ -14,7 +14,7 @@ Example questions:
 
 | Tool | What it does | Source |
 |---|---|---|
-| `search_products(query)` | Packaged products by name or barcode: Nutri-Score and nutrients per 100 g | [Open Food Facts](https://world.openfoodfacts.org) (no key) |
+| `search_products(query)` | Packaged products by name or barcode: Nutri-Score and nutrients per 100 g | [Open Food Facts](https://world.openfoodfacts.org) (no key); if its search is busy, USDA branded foods |
 | `search_foods(query)` | Basic foods (e.g. "banana"): nutrients per 100 g | [USDA FoodData Central](https://fdc.nal.usda.gov) (free key) |
 | `calculate_daily_needs(...)` | Calorie target plus sugar, saturated fat, sodium, fiber and protein guidelines for adults | Python (Mifflin-St Jeor, WHO limits) |
 | `scale_to_portion(per_100g, grams)` | Nutrients in a portion | Python |
@@ -23,6 +23,7 @@ Each step of the loop ([`react_engine.py`](react_engine.py)) is checked before a
 
 - **Schema validation**: arguments are checked against each tool's pydantic model ([`nutrition_coach.py`](nutrition_coach.py)), e.g. ages under 18 are rejected. Errors are sent back to the model so it can fix the call.
 - **Guards**: a step limit, loop detection (a repeated identical call gets a warning, a second repeat ends the run), and a consecutive-error limit.
+- **Busy databases**: requests that get "busy" responses (429/503) are retried twice. If Open Food Facts' name search is still unavailable, the app searches USDA's branded foods instead. Results are cached in memory, which also keeps the app under Open Food Facts' search rate limit.
 - **Grounding check**: a final answer with a number that is not in any tool result (or the question) is sent back once. If the model does it again, the answer is shown with a warning (status `unverified`).
 - **Safety**: answers are for adults and end with a short not-medical-advice note. The model is told to refer medical conditions, pregnancy and eating disorders to a doctor or dietitian.
 

@@ -25,14 +25,23 @@ FDC_BODY = {"foods": [{"description": "Bananas, raw", "fdcId": 173944, "foodNutr
 
 
 class FakeResponse:
-    def __init__(self, body):
+    def __init__(self, body, status_code=200):
         self.body = body
+        self.status_code = status_code
 
     def raise_for_status(self):
-        pass
+        if self.status_code >= 400:
+            raise nc.requests.HTTPError(f"{self.status_code} Server Error")
 
     def json(self):
         return self.body
+
+
+@pytest.fixture(autouse=True)
+def fresh_http_state(monkeypatch):
+    """Empty cache and no retry waits in every test."""
+    nc._cache.clear()
+    monkeypatch.setattr(nc, "RETRY_DELAY_S", 0)
 
 
 @pytest.fixture
