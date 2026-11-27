@@ -26,3 +26,17 @@ def test_missing_closing_brace():
 
 def test_not_json():
     assert extract_json("no json here") is None
+
+
+def test_text_with_braces_before_the_json():
+    text = 'I will call search_products with {query} next.\n{"thought": "t", "action": "search_products", "action_input": {"query": "cola"}}'
+    assert extract_json(text)["action"] == "search_products"
+
+
+def test_call_wrapped_in_a_list():
+    text = '[{"thought": "t", "action": "search_products", "action_input": {"query": "cola"}}]'
+    assert extract_json(text)["action"] == "search_products"
+
+
+def test_prose_answer_is_not_json():
+    assert extract_json("The daily limit is 67 g, so a can is about half of it.") is None

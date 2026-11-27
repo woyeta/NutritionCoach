@@ -56,35 +56,53 @@ def sanitize_json(raw: str) -> str:
     return text.strip()
 
 
-def _first_object(text: str) -> Optional[Any]:
-    """Decodes the JSON value starting at the first '{', ignoring any trailing text."""
-    start = text.find("{")
-    if start == -1:
-        return None
-    try:
-        value, _ = _decoder.raw_decode(text, start)
+_STEP_KEYS = ("action", "final_answer", "thought")
+
+
+def _as_step(value) -> Optional[Dict[str, Any]]:
+    """A step object, or the first one in a list (models sometimes wrap the call in [...])."""
+    if isinstance(value, dict):
         return value
+    if isinstance(value, list):
+        return next((v for v in value if isinstance(v, dict) and any(k in v for k in _STEP_KEYS)), None)
+    return None
+
+
+def _objects(text: str):
+    """Yields every JSON object (or step in a list) that starts at a '{' or '[' in the text."""
+    try:
+        step = _as_step(json.loads(text))
+        if step is not None:
+            yield step
     except json.JSONDecodeError:
-        return None
+        pass
+    for i, ch in enumerate(text):
+        if ch in "{[":
+            try:
+                value, _ = _decoder.raw_decode(text, i)
+            except json.JSONDecodeError:
+                continue
+            step = _as_step(value)
+            if step is not None:
+                yield step
 
 
 def extract_json(text: str) -> Optional[Dict[str, Any]]:
     """
     Extracts and parses a JSON object from text, returning None if parsing fails.
 
-    Tries the text as-is first, then the first complete object (models often keep
-    generating after the closing brace), then a sanitized version of both.
+    Looks in the text as-is and in a sanitized version (fences, comments and trailing
+    commas removed, missing braces added), anywhere in the text, since models often write
+    text before the JSON or keep generating after it. An object with step keys ("thought",
+    "action", "final_answer") wins over any other object, such as a nested action_input.
     """
-    stripped = _strip_fences(text)
-    for candidate in (stripped, sanitize_json(text)):
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError:
-            pass
-        value = _first_object(candidate)
-        if value is not None:
-            return value
-    return None
+    fallback = None
+    for candidate in (_strip_fences(text), sanitize_json(text)):
+        for obj in _objects(candidate):
+            if any(k in obj for k in _STEP_KEYS):
+                return obj
+            fallback = fallback or obj
+    return fallback
 
 
 def sanitize_model_response(response: str) -> Tuple[bool, Union[Dict[str, Any], str]]:

@@ -198,7 +198,11 @@ function renderTraceStep(step, index) {
     step.action && { type: 'act', label: 'ACT', text: formatValue(step.action_input), tool: step.action },
     step.observation != null && { type: 'observe', label: 'OBSERVE', text: formatValue(step.observation) },
     (stepType === 'final_answer' || step.final_answer) && { type: 'answer', label: 'ANSWER', text: formatValue(step.final_answer) },
-    (stepType === 'error' || step.error) && { type: 'error', label: 'ERROR', text: String(step.error || '') },
+    (stepType === 'error' || step.error) && {
+      type: 'error',
+      label: 'ERROR',
+      text: String(step.error || '') + (step.raw_response ? `\n\nModel output:\n${step.raw_response}` : ''),
+    },
   ].filter(Boolean);
 
   parts.forEach((p) => el.traceSteps.appendChild(createTraceCard(p.type, p.label, p.text, p.tool, n)));

@@ -70,7 +70,8 @@ def react_loop(user_query: str, max_turns: int = 5, generate=None) -> dict:
         response = extract_json(text)
 
         if not isinstance(response, dict):
-            fields = {"error": "Invalid JSON response from model", "raw_response": text[:200]}
+            logger.warning(f"Turn {turn}: model output is not a JSON object: {text[:1000]!r}")
+            fields = {"error": "Invalid JSON response from model", "raw_response": text[:500]}
             if reject(turn, fields, ERR_MSG_INVALID_JSON):
                 return result(None, turn, "consecutive_errors")
             continue

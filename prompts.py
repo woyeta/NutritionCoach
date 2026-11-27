@@ -25,7 +25,8 @@ RULES:
 # Error observations are returned to the model in the history, so they use plain
 # braces (they are never passed through str.format unless they have a placeholder).
 ERR_MSG_INVALID_JSON = (
-    'Error: Invalid JSON response was generated. Use this STRICT format for reasoning '
+    'Error: Invalid JSON response was generated. Output exactly one JSON object and nothing '
+    'else (no text before or after it). Use this STRICT format for reasoning '
     '— output a JSON block:\n'
     '{"thought": "...", "action": "...", "action_input": {"key": "value"}}\n\n'
     'If you have enough information, output a final JSON block:\n'
