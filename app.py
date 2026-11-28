@@ -7,12 +7,14 @@ import os
 
 from flask import Flask, jsonify, render_template, request
 
+from fitness_import import import_files
 from nutrition_coach import closing_notes
 from user_profile import allergy_warnings, parse_profile, user_allergens
 from prompts import DEFAULT_MAX_TURNS, MAX_TURNS_LIMIT, MODEL_ID
 from react_engine import react_loop
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # fitness-app exports can be large
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -60,6 +62,26 @@ def ask():
         result["steps"][-1]["final_answer"] = result["final_answer"]
     result["used_profile"] = profile is not None
     return jsonify({"success": True, "result": result})
+
+
+@app.route("/api/profile/import", methods=["POST"])
+def import_profile():
+    """
+    Reads weight, height and activity from uploaded fitness-app export files (field "files",
+    CSV or ZIP). Returns the values for the user to review; nothing is stored.
+    """
+    uploads = request.files.getlist("files")
+    if not uploads:
+        return jsonify({"success": False, "error": "Choose at least one file to import."}), 400
+    result = import_files([(f.filename or "", f.read()) for f in uploads])
+    if "error" in result:
+        return jsonify({"success": False, "error": result["error"]}), 400
+    return jsonify({"success": True, **result})
+
+
+@app.errorhandler(413)
+def too_large(_err):
+    return jsonify({"success": False, "error": "Upload is over 200 MB. Upload only the CSV files you need."}), 413
 
 
 if __name__ == "__main__":

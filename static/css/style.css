@@ -704,3 +704,33 @@ button {
   align-items: center;
   gap: 8px;
 }
+
+.profile-import {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--secondary);
+}
+
+.profile-import-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.profile-import input[type="file"] {
+  font-size: 12px;
+  max-width: 100%;
+}
+
+.import-details {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.import-details .warning {
+  color: var(--observe-text);
+}

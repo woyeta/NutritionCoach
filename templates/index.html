@@ -30,6 +30,7 @@
         </div>
         <div class="sidebar-tools no-scrollbar">
           <span class="section-label">Try asking</span>
+          <button class="tool-item example-item"><span class="tool-name">Using my profile, what should my daily calories and protein be?</span></button>
           <button class="tool-item example-item"><span class="tool-name">How much sugar is in a 30 g serving of Nutella?</span></button>
           <button class="tool-item example-item"><span class="tool-name">Compare the protein in cooked brown rice and cooked white rice per 100 g.</span></button>
           <button class="tool-item example-item"><span class="tool-name">I'm a 30-year-old woman, 62 kg, 165 cm, moderately active, and want to lose weight. What should my daily calories be?</span></button>
@@ -126,6 +127,19 @@
                 <input name="conditions" type="text" maxlength="200" placeholder="e.g. type 2 diabetes, pregnant" />
               </label>
             </form>
+            <div class="profile-import">
+              <span class="profile-import-title">Fill in from a fitness app</span>
+              <span class="profile-note">
+                Samsung Health: Settings → Download personal data, then upload the ZIP (or its weight, height and
+                pedometer_day_summary CSV files). Google Fit: Google Takeout → Fit, then upload
+                “Daily activity metrics.csv”. Reads weight, height and average steps; files aren't stored.
+              </span>
+              <div class="profile-actions">
+                <input type="file" id="importFiles" multiple accept=".zip,.csv" />
+                <button class="btn-reset" id="importBtn" type="button">Import</button>
+              </div>
+              <ul class="import-details" id="importDetails" hidden></ul>
+            </div>
             <div class="profile-actions">
               <button class="btn-run" id="profileSaveBtn" type="button">Save</button>
               <button class="btn-reset" id="profileClearBtn" type="button">Clear</button>

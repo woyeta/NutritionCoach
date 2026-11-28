@@ -36,6 +36,31 @@ matches are listed under "Allergy check against your profile" at the end of the 
 The profile is saved only in your browser (localStorage) and sent with each question. The server
 uses it for that question and never stores or logs it. It is defined in [`user_profile.py`](user_profile.py).
 
+### Filling in the profile from a fitness app
+
+In the Profile panel, **Fill in from a fitness app** reads your weight, height and average daily steps
+from export files and fills in the form for you to check and save. Steps become an activity level:
+under 5,000 a day is sedentary, then light (to 7,500), moderate (to 10,000), active (to 12,500) and very
+active. Sex, age, goal, diet and allergies are still entered by hand.
+
+| App | How to export | Upload |
+|---|---|---|
+| Samsung Health | Settings → Download personal data | The ZIP, or `com.samsung.health.weight.*.csv`, `com.samsung.health.height.*.csv` and `com.samsung.shealth.tracker.pedometer_day_summary.*.csv` |
+| Google Fit | Google Takeout → Fit | `Daily activity metrics.csv` |
+
+Files are read in memory and never stored ([`fitness_import.py`](fitness_import.py)).
+
+Why export files instead of a live connection:
+
+- **Google Fit APIs** are deprecated in 2026 and the REST API has no replacement.
+- **Health Connect**, where Samsung Health and other Android apps share data, is an on-device Android
+  API. Reading it needs an Android app; its own export is a backup ZIP meant for restoring on a phone.
+- **Samsung Health** has no web API; its SDK is for Android apps.
+- **Google Health API** (the new REST API) is the one live option, but it needs a Google Cloud project,
+  OAuth with restricted scopes (an unverified app is limited to 100 users) and a fixed web address,
+  which ngrok on Colab or Kaggle doesn't give. It covers Fitbit and Google-account data, not Samsung
+  Health. It would be the next step if the app gets a permanent address.
+
 ### Checks on every step
 
 Each step of the loop ([`react_engine.py`](react_engine.py)) is checked before anything runs:
@@ -59,6 +84,7 @@ agent_format.py     Builds the prompt for each step
 json_utils.py       Extracts JSON from model output
 model_loader.py     Loads Gemma 4 from Hugging Face in 4-bit
 user_profile.py     The saved profile: validation, prompt line, allergy check
+fitness_import.py   Reads weight, height and steps from Samsung Health and Google Fit exports
 prompts.py          System prompt, error messages, settings
 templates/, static/ Web page
 tests/              Tests (no GPU or network needed)

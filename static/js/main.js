@@ -106,6 +106,49 @@ function clearProfile() {
   renderProfileSummary();
 }
 
+async function importFromFitnessApp() {
+  const files = el.importFiles.files;
+  if (!files || files.length === 0) {
+    el.profileStatus.textContent = 'Choose your export file(s) first.';
+    return;
+  }
+  const body = new FormData();
+  Array.from(files).forEach((file) => body.append('files', file));
+  el.importBtn.disabled = true;
+  el.profileStatus.textContent = 'Reading your files…';
+  el.importDetails.hidden = true;
+
+  try {
+    const response = await fetch('/api/profile/import', { method: 'POST', body });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || `Import failed (HTTP ${response.status})`);
+    }
+    const form = el.profileForm.elements;
+    Object.entries(data.profile || {}).forEach(([name, value]) => {
+      if (form[name]) form[name].value = value;
+    });
+    el.importDetails.innerHTML = '';
+    (data.details || []).forEach((text) => {
+      const li = document.createElement('li');
+      li.textContent = text;
+      el.importDetails.appendChild(li);
+    });
+    (data.warnings || []).forEach((text) => {
+      const li = document.createElement('li');
+      li.className = 'warning';
+      li.textContent = text;
+      el.importDetails.appendChild(li);
+    });
+    el.importDetails.hidden = false;
+    el.profileStatus.textContent = `Imported from ${(data.sources || []).join(' and ')}. Check the values, then click Save.`;
+  } catch (err) {
+    el.profileStatus.textContent = err.message || 'Import failed.';
+  } finally {
+    el.importBtn.disabled = false;
+  }
+}
+
 function currentProfile() {
   return loadProfile() || state.sessionProfile || null;
 }
@@ -130,6 +173,9 @@ function init() {
     profileStatus:      document.getElementById('profileStatus'),
     profileSummary:     document.getElementById('profileSummary'),
     profileSummaryText: document.getElementById('profileSummaryText'),
+    importFiles:        document.getElementById('importFiles'),
+    importBtn:          document.getElementById('importBtn'),
+    importDetails:      document.getElementById('importDetails'),
   };
 
   renderProfileSummary();
@@ -137,6 +183,7 @@ function init() {
   el.profileSummary.addEventListener('click', () => toggleProfilePanel(true));
   el.profileSaveBtn.addEventListener('click', saveProfile);
   el.profileClearBtn.addEventListener('click', clearProfile);
+  el.importBtn.addEventListener('click', importFromFitnessApp);
 
   document.querySelectorAll('.example-item').forEach((btn) => {
     btn.addEventListener('click', () => {
