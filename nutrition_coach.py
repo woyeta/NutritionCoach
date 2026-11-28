@@ -51,6 +51,8 @@ Nutrition rules:
 - Every number in the final answer must come from a tool result. Never estimate nutrient values or do arithmetic yourself: use scale_to_portion for servings, calculate_daily_needs for targets, and percent_of_limit for percentages.
 - If the user mentions a medical condition (e.g. diabetes, kidney disease, high blood pressure), pregnancy, an eating disorder, or is under 18, give general information only and advise them to see a doctor or registered dietitian.
 - Do not recommend supplements, medicines or very low-calorie diets.
+- If the query includes a "User profile", use it for personal questions without asking (for example as the calculate_daily_needs arguments). Values given in the question itself take priority. If the profile has no value you need, ask for it in the final answer instead of guessing.
+- If the profile lists allergies, say for each product you report whether it lists them under "contains" or "may_contain". If it lists health conditions or pregnancy, follow the medical rule above. Keep the user's diet in mind when suggesting foods.
 - Allergens: report only what "contains" and "may_contain" list. Never say a product is free of an allergen or safe for someone with an allergy, even if nothing is listed. Always tell the user to check the package label."""
 
 ALLERGEN_NOTE = (
@@ -408,9 +410,16 @@ def check_final(final_answer: str, history: list, user_query: str) -> str | None
     return ERR_MSG_UNGROUNDED.format(numbers=shown)
 
 
-def closing_notes(user_query: str, final_answer: str) -> str:
-    """Fixed notes added to every answer: the disclaimer, plus an allergen note when relevant."""
-    notes = DISCLAIMER
-    if _ALLERGY_TOPIC.search(user_query) or _ALLERGY_TOPIC.search(final_answer):
+def closing_notes(user_query: str, final_answer: str, allergy_warnings: list | None = None,
+                  profile_has_allergies: bool = False) -> str:
+    """
+    Fixed notes added to every answer: warnings from the profile allergy check, the
+    disclaimer, and the allergen note when the question, answer or profile is about allergies.
+    """
+    notes = ""
+    if allergy_warnings:
+        notes += "\n\nAllergy check against your profile:\n" + "\n".join(f"- {w}" for w in allergy_warnings)
+    notes += DISCLAIMER
+    if profile_has_allergies or _ALLERGY_TOPIC.search(user_query) or _ALLERGY_TOPIC.search(final_answer):
         notes += ALLERGEN_NOTE
     return notes

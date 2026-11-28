@@ -25,6 +25,19 @@ from 1 (unprocessed or minimally processed) to 4 (ultra-processed). Allergens co
 | `scale_to_portion(per_100g, grams, food)` | Nutrients in a portion | Python |
 | `percent_of_limit(amount, limit, label)` | What percent of a daily limit an amount is | Python |
 
+### Your profile
+
+Click **Profile** to save your sex, age, height, weight, activity level, goal, diet, allergies and
+health conditions. The agent then uses them automatically: "What should my daily calories be?" is
+answered from your profile without typing your details, while values you give in the question take
+priority. Allergies are also checked against the label data of every product the agent looks up, and
+matches are listed under "Allergy check against your profile" at the end of the answer.
+
+The profile is saved only in your browser (localStorage) and sent with each question. The server
+uses it for that question and never stores or logs it. It is defined in [`user_profile.py`](user_profile.py).
+
+### Checks on every step
+
 Each step of the loop ([`react_engine.py`](react_engine.py)) is checked before anything runs:
 
 - **Schema validation**: arguments are checked against each tool's pydantic model ([`nutrition_coach.py`](nutrition_coach.py)), e.g. ages under 18 are rejected. Errors are sent back to the model so it can fix the call.
@@ -45,6 +58,7 @@ tool_schema.py      Argument validation and repeated-call detection
 agent_format.py     Builds the prompt for each step
 json_utils.py       Extracts JSON from model output
 model_loader.py     Loads Gemma 4 from Hugging Face in 4-bit
+user_profile.py     The saved profile: validation, prompt line, allergy check
 prompts.py          System prompt, error messages, settings
 templates/, static/ Web page
 tests/              Tests (no GPU or network needed)

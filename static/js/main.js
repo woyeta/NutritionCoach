@@ -9,6 +9,107 @@ const state = {
 let el = {};
 let currentAbortController = null;
 
+// ── Profile (stored in this browser only) ──
+
+const PROFILE_KEY = 'nutritionCoachProfile';
+const PROFILE_FIELDS = ['sex', 'age', 'height_cm', 'weight_kg', 'activity', 'goal', 'diet', 'allergies', 'conditions'];
+const NUMBER_FIELDS = ['age', 'height_cm', 'weight_kg'];
+
+function loadProfile() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+    return saved && typeof saved === 'object' ? saved : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function storeProfile(profile) {
+  try {
+    if (profile) {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+    } else {
+      localStorage.removeItem(PROFILE_KEY);
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function readProfileForm() {
+  const form = el.profileForm.elements;
+  const profile = {};
+  PROFILE_FIELDS.forEach((name) => {
+    const value = String(form[name].value || '').trim();
+    if (value !== '') {
+      profile[name] = NUMBER_FIELDS.includes(name) ? Number(value) : value;
+    }
+  });
+  return Object.keys(profile).length ? profile : null;
+}
+
+function fillProfileForm(profile) {
+  const form = el.profileForm.elements;
+  PROFILE_FIELDS.forEach((name) => {
+    form[name].value = profile && profile[name] != null ? profile[name] : '';
+  });
+}
+
+function profileSummary(profile) {
+  if (!profile) return 'No profile saved. Click to add one.';
+  const parts = [];
+  if (profile.sex) parts.push(profile.sex);
+  if (profile.age) parts.push(`${profile.age} y`);
+  if (profile.height_cm) parts.push(`${profile.height_cm} cm`);
+  if (profile.weight_kg) parts.push(`${profile.weight_kg} kg`);
+  if (profile.activity) parts.push(profile.activity.replace('_', ' '));
+  if (profile.goal) parts.push(`goal: ${profile.goal}`);
+  if (profile.diet) parts.push(profile.diet);
+  if (profile.allergies) parts.push(`allergies: ${profile.allergies}`);
+  if (profile.conditions) parts.push(profile.conditions);
+  return `Used in every question: ${parts.join(', ')}`;
+}
+
+function renderProfileSummary() {
+  el.profileSummaryText.textContent = profileSummary(loadProfile());
+}
+
+function toggleProfilePanel(show) {
+  const open = show !== undefined ? show : el.profilePanel.hidden;
+  el.profilePanel.hidden = !open;
+  if (open) {
+    fillProfileForm(loadProfile());
+    el.profileStatus.textContent = '';
+  }
+}
+
+function saveProfile() {
+  const profile = readProfileForm();
+  if (!el.profileForm.checkValidity()) {
+    el.profileForm.reportValidity();
+    return;
+  }
+  const ok = storeProfile(profile);
+  el.profileStatus.textContent = ok
+    ? (profile ? 'Saved. Your questions will use this profile.' : 'Nothing to save, so the profile is empty.')
+    : "Couldn't save in this browser (storage is blocked). It will be used until you reload the page.";
+  if (!ok) state.sessionProfile = profile;
+  renderProfileSummary();
+}
+
+function clearProfile() {
+  storeProfile(null);
+  state.sessionProfile = null;
+  fillProfileForm(null);
+  el.profileStatus.textContent = 'Profile cleared.';
+  renderProfileSummary();
+}
+
+function currentProfile() {
+  return loadProfile() || state.sessionProfile || null;
+}
+
 const formatValue = (v) =>
   v == null ? '' : typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v);
 
@@ -21,7 +122,21 @@ function init() {
     outputEmpty:    document.getElementById('outputEmpty'),
     thinking:       document.getElementById('thinkingIndicator'),
     status:         document.getElementById('statusIndicator'),
+    profileBtn:         document.getElementById('profileBtn'),
+    profilePanel:       document.getElementById('profilePanel'),
+    profileForm:        document.getElementById('profileForm'),
+    profileSaveBtn:     document.getElementById('profileSaveBtn'),
+    profileClearBtn:    document.getElementById('profileClearBtn'),
+    profileStatus:      document.getElementById('profileStatus'),
+    profileSummary:     document.getElementById('profileSummary'),
+    profileSummaryText: document.getElementById('profileSummaryText'),
   };
+
+  renderProfileSummary();
+  el.profileBtn.addEventListener('click', () => toggleProfilePanel());
+  el.profileSummary.addEventListener('click', () => toggleProfilePanel(true));
+  el.profileSaveBtn.addEventListener('click', saveProfile);
+  el.profileClearBtn.addEventListener('click', clearProfile);
 
   document.querySelectorAll('.example-item').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -105,7 +220,7 @@ async function runAgent() {
     const response = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: prompt }),
+      body: JSON.stringify({ query: prompt, profile: currentProfile() }),
       signal: currentAbortController.signal,
     });
 

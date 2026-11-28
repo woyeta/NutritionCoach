@@ -16,6 +16,7 @@ import logging
 import nutrition_coach as nc
 from agent_format import Generation, history_entry
 from json_utils import extract_json
+from user_profile import with_profile
 from prompts import (
     DEFAULT_MAX_TURNS,
     ERR_MSG_API_FAIL,
@@ -83,17 +84,20 @@ def _default_generate(user_query: str, history: list) -> Generation:
     return run_inference(user_query, nc.DOCUMENTATION, history)
 
 
-def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=None) -> dict:
+def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=None, profile=None) -> dict:
     """
     Answers a query. `generate(query, history)` returns a Generation (or str); it
-    defaults to the Gemma model and can be replaced in tests.
+    defaults to the Gemma model and can be replaced in tests. If a `profile`
+    (profile.Profile) is given, it is added to the query the model sees, and its values
+    count as known numbers for the grounding check.
 
     Returns {"final_answer", "steps", "turns_used", "status"}, where status is one of
     success, unverified, loop_detected, consecutive_errors, max_turns_reached.
     """
     generate = generate or _default_generate
     max_turns = max(1, min(int(max_turns), MAX_TURNS_LIMIT))
-    logger.info(f"Starting ReAct loop for query: {user_query}")
+    logger.info(f"Starting ReAct loop for query: {user_query}")  # the profile is not logged
+    model_query = with_profile(user_query, profile)
 
     history, steps = [], []
     consecutive_errors = 0
@@ -112,7 +116,7 @@ def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=Non
         return consecutive_errors >= MAX_CONSECUTIVE_ERRORS
 
     for turn in range(1, max_turns + 1):
-        generation = generate(user_query, history)
+        generation = generate(model_query, history)
         text = generation.text if isinstance(generation, Generation) else str(generation)
         response = extract_json(text)
 
@@ -129,7 +133,7 @@ def react_loop(user_query: str, max_turns: int = DEFAULT_MAX_TURNS, generate=Non
         # Final answer
         final_answer = response.get("final_answer")
         if final_answer:
-            problem = nc.check_final(str(final_answer), history, user_query)
+            problem = nc.check_final(str(final_answer), history, model_query)
             if problem and not final_rejected:
                 final_rejected = True
                 if reject(turn, {"thought": thought, "error": f"Final answer rejected: {problem}"}, problem):
