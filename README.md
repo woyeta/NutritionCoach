@@ -38,14 +38,15 @@ uses it for that question and never stores or logs it. It is defined in [`user_p
 
 ### Filling in the profile from a fitness app
 
-In the Profile panel, **Fill in from a fitness app** reads your weight, height and average daily steps
-from export files and fills in the form for you to check and save. Steps become an activity level:
+In the Profile panel, **Fill in from a fitness app** reads your weight, height, age (Samsung Health)
+and average daily steps from export files and fills in the form for you to check and save. Steps become an activity level:
 under 5,000 a day is sedentary, then light (to 7,500), moderate (to 10,000), active (to 12,500) and very
-active. Sex, age, goal, diet and allergies are still entered by hand.
+active, averaged over the last 30 full days. Sex, goal, diet and allergies are still entered by hand.
+Tested on a real Samsung Health export from November 2026.
 
 | App | How to export | Upload |
 |---|---|---|
-| Samsung Health | Settings → Download personal data | The ZIP, or `com.samsung.health.weight.*.csv`, `com.samsung.health.height.*.csv` and `com.samsung.shealth.tracker.pedometer_day_summary.*.csv` |
+| Samsung Health | Settings → Download personal data | The ZIP, or `com.samsung.health.weight.*.csv`, `com.samsung.health.height.*.csv`, `com.samsung.shealth.tracker.pedometer_day_summary.*.csv` and `com.samsung.health.user_profile.*.csv` |
 | Google Fit | Google Takeout → Fit | `Daily activity metrics.csv` |
 
 Files are read in memory and never stored ([`fitness_import.py`](fitness_import.py)).

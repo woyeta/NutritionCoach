@@ -7,8 +7,9 @@ app, and Samsung Health has no web API. Both apps can export your data as files,
 user uploads those instead:
 
 - Samsung Health: Settings → Download personal data. Upload the ZIP, or the CSV files
-  com.samsung.health.weight.*.csv, com.samsung.health.height.*.csv and
-  com.samsung.shealth.tracker.pedometer_day_summary.*.csv.
+  com.samsung.health.weight.*.csv, com.samsung.health.height.*.csv,
+  com.samsung.shealth.tracker.pedometer_day_summary.*.csv and
+  com.samsung.health.user_profile.*.csv (birth date, so age).
 - Google Fit: Google Takeout → Fit. Upload "Daily activity metrics.csv".
 
 Files are read in memory and never stored. Average daily steps are turned into an
@@ -96,6 +97,18 @@ def _time(value: str):
     return None
 
 
+def _age(birth_date: str):
+    """"YYYYMMDD" or "YYYY-MM-DD" → age in whole years, or None."""
+    digits = (birth_date or "").replace("-", "").strip()[:8]
+    try:
+        born = datetime.strptime(digits, "%Y%m%d").date()
+    except ValueError:
+        return None
+    today = datetime.now(timezone.utc).date()
+    age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    return age if 1 <= age <= 120 else None
+
+
 def _float(value):
     try:
         return float(str(value).replace(",", "")) if value not in (None, "") else None
@@ -122,6 +135,7 @@ def import_files(files: list[tuple[str, bytes]]) -> dict:
     or {"error": "..."} if nothing usable was found.
     """
     weights, heights = [], []
+    age, sex = None, None
     daily_steps = {}  # date → (steps, source)
     sources, warnings = set(), []
 
@@ -136,6 +150,16 @@ def import_files(files: list[tuple[str, bytes]]) -> dict:
                     weights.append((t, w, "Samsung Health"))
                 if h:
                     heights.append((t, h, "Samsung Health"))
+            sources.add("Samsung Health")
+
+        elif base.startswith("com.samsung.health.user_profile."):
+            # Key/value rows: key=birth_date, text_value=YYYYMMDD; key=gender if present.
+            for row in _rows(data, {"key"}):
+                key, text = row.get("key", ""), row.get("text_value", "").lower()
+                if key == "birth_date":
+                    age = _age(row.get("text_value", ""))
+                elif key == "gender" and text in ("m", "male", "f", "female"):
+                    sex = "male" if text.startswith("m") else "female"
             sources.add("Samsung Health")
 
         elif base.startswith("com.samsung.health.height."):
@@ -186,6 +210,15 @@ def import_files(files: list[tuple[str, bytes]]) -> dict:
         when = f", measured {height[0].date()}" if height[0] else ""
         details.append(f"Height {profile['height_cm']:g} cm{when} ({height[2]})")
 
+    if age is not None:
+        profile["age"] = age
+        details.append(f"Age {age}, from your birth date (Samsung Health)")
+    if sex:
+        profile["sex"] = sex
+        details.append(f"Sex: {sex} (Samsung Health)")
+
+    today = datetime.now(timezone.utc).date()
+    daily_steps = {d: v for d, v in daily_steps.items() if d < today}  # today isn't over yet
     if daily_steps:
         last_day = max(daily_steps)
         window = [s for d, (s, _) in daily_steps.items() if d > last_day - timedelta(days=STEP_WINDOW_DAYS)]

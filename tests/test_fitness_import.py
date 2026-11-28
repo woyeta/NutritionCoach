@@ -106,3 +106,30 @@ def test_import_endpoint():
     assert response.status_code == 200 and body["success"]
     assert body["profile"]["weight_kg"] == 68.4 and body["profile"]["activity"] == "moderate"
     assert client.post("/api/profile/import", data={}, content_type="multipart/form-data").status_code == 400
+
+
+def test_layout_of_a_real_2026_samsung_export():
+    # Same file layout as a real Samsung Health export from November 2026 (made-up values):
+    # unprefixed columns, day_time as a date string, two rows a day, today's partial day,
+    # and a key/value user_profile file with birth_date as YYYYMMDD.
+    steps = ["com.samsung.shealth.tracker.pedometer_day_summary,7014003,8",
+             "create_sh_ver,step_count,active_time,update_time,source_info,deviceuuid,day_time"]
+    for n in range(0, 31):
+        stamp = f"{day(n):%Y-%m-%d} 00:00:00.000"
+        steps.append(f"1,{9000 if n else 50},0,x,,phoneA,{stamp}")   # today (n=0) is partial
+        steps.append(f"1,{8800 if n else 40},0,x,{{}},watchB,{stamp}")
+    weight = ["com.samsung.health.weight,7014003,13",
+              "body_fat_mass,create_sh_ver,start_time,custom,height,weight,time_offset,deviceuuid",
+              f",1,{day(5):%Y-%m-%d} 09:00:00.000,,180,75.5,UTC+0530,phoneA"]
+    profile = ["com.samsung.health.user_profile,7014003,10",
+               "text_value,create_sh_ver,float_value,update_time,key,int_value",
+               f"{TODAY.year - 30}0101,1,,x,birth_date,",
+               "IN,1,,x,country,",
+               ",1,180.0,x,height,"]
+    folder = "samsunghealth_user_1/"
+    data = as_zip([(folder + "com.samsung.shealth.tracker.pedometer_day_summary.1.csv", "\n".join(steps).encode()),
+                   (folder + "com.samsung.health.weight.1.csv", "\n".join(weight).encode()),
+                   (folder + "com.samsung.health.user_profile.1.csv", "\n".join(profile).encode())])
+    result = import_files([("export.zip", data)])
+    assert result["profile"] == {"weight_kg": 75.5, "height_cm": 180.0, "age": 30, "activity": "moderate"}
+    assert "Average 9,000 steps a day on 30 days" in result["details"][-1]  # today left out
